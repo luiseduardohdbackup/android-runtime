@@ -14,8 +14,40 @@ import java.net.URISyntaxException;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.content.res.AssetManager;
+
 public class FileSystem
 {
+	public static String readAssetFile(AssetManager manager, String path)
+	{
+		InputStream stream = null;
+		try
+		{
+			stream = manager.open(path);
+			return readAll(stream);
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+			return "";
+		}
+		finally
+		{
+			if(stream != null)
+			{
+				try
+				{
+					stream.close();
+				}
+				catch (IOException e)
+				{
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
 	public static String readAll(InputStream inputStream) throws IOException
 	{
 		StringBuilder text;
@@ -44,6 +76,27 @@ public class FileSystem
 		}
 
 		return text.toString();
+	}
+	
+	public static String readFile(String path)
+	{
+		File file = new File(path);
+		try
+		{
+			return readText(file);
+		}
+		catch (FileNotFoundException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return "";
+		}
+		catch (IOException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return "";
+		}
 	}
 	
 	public static String readText(File file) throws FileNotFoundException, IOException{

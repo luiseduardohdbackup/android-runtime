@@ -2,11 +2,13 @@ package com.tns;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.content.Context;
+import android.content.res.AssetManager;
 import android.util.Log;
 
 public class Require
@@ -16,7 +18,13 @@ public class Require
 	private static String ModulesFilesPath;
 	private static String NativeScriptModulesFilesPath;
 	private static boolean initialized = false;
-	private static final String ModuleContent = "(function(){\n var module = {}; module.exports = arguments[0];" + "var exports = module.exports; var __dirname = \"%s\"; var __filename = \"%s\";" + "function require(moduleName){ return global.require(moduleName, __filename); }" + "module.filename = __filename; this.__extends = global.__extends; \n %s \n return module.exports; \n})";
+	private static final String ModuleContent = "(function(){\n var module = {}; module.exports = arguments[0];" + 
+			"var exports = module.exports; var __dirname = \"%s\"; var __filename = \"%s\";" + 
+			"function require(moduleName){ return global.require(moduleName, __filename); }" + 
+			"module.filename = __filename; this.__extends = global.__extends; \n %s \n return module.exports; \n})";
+	private static final String AssetFile = "ASSET:";
+	private static final String FileNotFound = "";
+	private static Context AppContext;
 
 	public static void init(Context context)
 	{
@@ -25,6 +33,7 @@ public class Require
 			return;
 		}
 
+		AppContext = context;
 		RootPackageDir = context.getApplicationInfo().dataDir;
 
 		ApplicationFilesPath = context.getApplicationContext().getFilesDir().getPath();
@@ -41,52 +50,40 @@ public class Require
 
 	public static String getAppContent(String appFileName)
 	{
-		File bootstrapFile = findModuleFile(appFileName, "");
-		return getModuleContent(bootstrapFile.getPath());
+		String bootstrapFile = getModulePath(appFileName, "");
+		return getModuleContent(bootstrapFile);
 	}
 
 	public static String getModuleContent(String modulePath)
 	{
-		File file = new File(modulePath);
-		if (file == null || !file.exists())
-		{
-			// Return empty content.
-			// This case will be handled by the NativeScriptRuntime.cpp and a JS
-			// exception will be raised.
-			return "";
-		}
-
 		if (Platform.IsLogEnabled)
 		{
-			Log.d(Platform.DEFAULT_LOG_TAG, "Loading module from files " + file.getPath());
+			Log.d(Platform.DEFAULT_LOG_TAG, "Loading module " + modulePath);
 		}
-
-		try
+		
+		String content;
+		String parent = "";
+		if(modulePath.startsWith(AssetFile))
 		{
-			String moduleFileContent = FileSystem.readText(file);
-			// IMPORTANT: Update MODULE_LINES_OFFSET in NativeScript.h
-			// if you change the number of new lines that exists before the
-			// moduleFileContent for correct error reporting.
-			// We are inserting local require function in the scope of the
-			// module to pass the __fileName (calling file) variable in the
-			// global.require request.
-			return String.format(ModuleContent, file.getParent(), modulePath, moduleFileContent);
+			content = FileSystem.readAssetFile(AppContext.getAssets(), modulePath.replace(AssetFile, ""));
 		}
-		catch (IOException e)
+		else
 		{
-			// Return empty content.
-			// This case will be handled by the NativeScriptRuntime.cpp and a JS
-			// exception will be raised.
-			return "";
+			content = FileSystem.readFile(modulePath);
+			parent = new File(modulePath).getParent();
 		}
+		
+		// IMPORTANT: Update MODULE_LINES_OFFSET in NativeScript.h if you change the number of new lines
+		// that exists before the moduleFileContent for correct error reporting.
+		// We are inserting local require function in the scope of the
+		// module to pass the __fileName (calling file) variable in the global.require request.
+		return String.format(ModuleContent, parent, modulePath, content);
 	}
 
 	public static String getModulePath(String moduleName, String callingModuleName)
 	{
-		// This method is called my the NativeScriptRuntime.cpp RequireCallback
-		// method.
-		// The currentModuleName is the fully-qualified path of the previously
-		// loaded module (if any)
+		// This method is called my the NativeScriptRuntime.cpp RequireCallback method.
+		// The currentModuleName is the fully-qualified path of the previously loaded module (if any)
 		String currentDirectory = null;
 
 		if (callingModuleName != null && !callingModuleName.isEmpty())
@@ -103,8 +100,12 @@ public class Require
 		}
 
 		File file = findModuleFile(moduleName, currentDirectory);
+		if(file == null)
+		{
+			return FileNotFound;
+		}
 
-		if (file != null && file.exists())
+		if (file.exists())
 		{
 			File projectRootDir = new File(RootPackageDir);
 			if (isFileExternal(file, projectRootDir))
@@ -116,10 +117,87 @@ public class Require
 				return file.getPath();
 			}
 		}
+		else
+		{
+			return tryGetAssetFile(file);
+		}
+	}
 
-		// empty path will be handled by the NativeScriptRuntime.cpp and a JS
-		// error will be thrown
-		return "";
+	private static String tryGetAssetFile(File file)
+	{
+		AssetManager manager = AppContext.getAssets();
+		String path = getAssetFileRelativePath(file.getPath());
+		String parentPath = getAssetFileRelativePath(file.getParent());
+		
+		String pathToList = path;
+		Boolean isJSFile = path.endsWith(".js");
+		if(isJSFile)
+		{
+			pathToList = parentPath;
+		}
+		
+		try
+		{
+			String[] assetsAtPath = manager.list(pathToList);
+			
+			String asset;
+			String entryFile = FileNotFound;
+			for(int i = 0; i < assetsAtPath.length; i++)
+			{
+				asset = assetsAtPath[i];
+				
+				// check for direct match or index.js
+				if(path.endsWith(asset) || asset == "index.js")
+				{
+					entryFile = pathToList + "/" + asset;
+					break;
+				}
+				
+				// check for package.json
+				if(asset == "package.json")
+				{
+					entryFile = path + "/" + getMainFileFromJSON(FileSystem.readAssetFile(manager, asset));
+					break;
+				}
+			}
+			
+			if(entryFile != FileNotFound)
+			{
+				entryFile = AssetFile + entryFile;
+			}
+			
+			return entryFile;
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+			return FileNotFound;
+		}
+	}
+	
+	private static String getAssetFileRelativePath(String absolutePath)
+	{
+		return absolutePath.replace(ApplicationFilesPath + "/", "");
+	}
+	
+	private static String getMainFileFromJSON(String json)
+	{
+		if(json == FileNotFound)
+		{
+			return FileNotFound;
+		}
+		
+		try
+		{
+			JSONObject obj = new JSONObject(json);
+			return obj.getString("main");
+		}
+		catch (JSONException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return FileNotFound;
+		}
 	}
 
 	private static boolean isFileExternal(File source, File target)

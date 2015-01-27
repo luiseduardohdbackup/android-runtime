@@ -82,6 +82,7 @@ public class AssetExtractor
 			
 			if (writableAssets)
 			{
+				// TODO: chmod 777 is potentially dangerous - read/write/execute for everyone
 				runtime.exec("chmod 777 " + appRoot);
 			}
 			
@@ -149,11 +150,25 @@ public class AssetExtractor
 		while (entries.hasMoreElements())
 		{
 			ZipEntry entry = (ZipEntry) entries.nextElement();
-			if (entry.getName().startsWith(ZIP_FILTER))
+			if (shouldExtractFile(entry))
 			{
 				list.add(entry);
 			}
 		}
 		return list;
+	}
+	
+	private static Boolean shouldExtractFile(ZipEntry entry)
+	{
+		String name = entry.getName();
+		
+		// extract metadata files
+		if (name.startsWith("assets/metadata"))
+		{
+			return true;
+		}
+		
+		// extract assets/internal
+		return name.startsWith("assets/internal");
 	}
 }

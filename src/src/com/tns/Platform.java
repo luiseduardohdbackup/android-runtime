@@ -85,12 +85,13 @@ public class Platform
 	
 	public static int init(Context context) throws Exception
 	{
-		jsDebugger = new JsDebugger(context);
-		mainThread = Thread.currentThread();
 		if (NativeScriptContext != null)
 		{
 			throw new Exception("NativeScriptApplication already initialized");
 		}
+		
+		jsDebugger = new JsDebugger(context);
+		mainThread = Thread.currentThread();
 
 		Require.init(context);
 
@@ -100,9 +101,15 @@ public class Platform
 		int appJavaObjectId = generateNewObjectId();
 		makeInstanceStrong(context, appJavaObjectId);
 		if (IsLogEnabled) Log.d(DEFAULT_LOG_TAG, "Initialized app instance id:" + appJavaObjectId);
-
+		
+		long millis = System.currentTimeMillis();
+		
 		int appBuilderWritableAssetsId = context.getResources().getIdentifier("appBuilderWritableAssets", "bool", context.getPackageName());
 		AssetExtractor.extractAssets(context, extractPolicy, appBuilderWritableAssetsId == 0 ? false : context.getResources().getBoolean(appBuilderWritableAssetsId));
+		
+		long elapsed = System.currentTimeMillis() - millis;
+		Log.i("MEASURE AssetExtractor", Long.valueOf(elapsed).toString());
+		
 		int debuggerPort = jsDebugger.getDebuggerPortFromEnvironment();
 		Platform.initNativeScript(Require.getApplicationFilesPath(), appJavaObjectId, IsLogEnabled, context.getPackageName(), debuggerPort);
 		
