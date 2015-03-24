@@ -7,6 +7,8 @@ import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.app.PendingIntent.CanceledException;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.GradientDrawable;
@@ -30,10 +32,12 @@ class ErrorReport
 	
 	static void startActivity(final Context context, Throwable ex)
 	{
+		//get error message
 		String errorDetailedMessage = getErrorMessage(ex);
 		final String errMsg = errorDetailedMessage;
 		
-		final Intent intent = getIntent(context, errMsg);
+		final Intent intent = getIntent(context, errMsg);		
+		
 		if(intent == null)
 		{
 			return; //(if in release mode) don't do anything
@@ -41,13 +45,32 @@ class ErrorReport
 		
 		CreateErrorFile(context);
 		
-		new Thread() {
-			@Override
-			public void run()
-			{
-				context.startActivity(intent);
-			}
-		}.start();
+		startPendingErrorActivity(context, intent);
+	}
+	
+	static void killProcess(Context context)
+	{
+		// finish current activity and all below it first
+		if (context instanceof Activity) {
+			((Activity)context).finishAffinity();
+		}
+
+		//kill process
+		android.os.Process.killProcess(android.os.Process.myPid());
+	}
+	
+	static void startPendingErrorActivity(Context context, Intent intent)
+	{
+		PendingIntent pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+		
+		try
+		{
+			pendingIntent.send(context, 0, intent);
+		}
+		catch (CanceledException e)
+		{
+			if (Platform.IsLogEnabled) Log.e(Platform.DEFAULT_LOG_TAG, "Couldn't send pending intent! Exception: " + e.getMessage());
+		}
 	}
 	
 	static String getErrorMessage(Throwable ex)

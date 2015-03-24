@@ -16,7 +16,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.zip.ZipEntry;
 
 import android.app.Activity;
 import android.content.Context;
@@ -153,25 +152,21 @@ public class Platform
 	{
 		if (handler == null)
 		{
-			final UncaughtExceptionHandler h = Thread.getDefaultUncaughtExceptionHandler();
-	
 			handler = new UncaughtExceptionHandler()
 			{
 				@Override
 				public void uncaughtException(Thread thread, Throwable ex)
 				{
-					ErrorReport.startActivity(NativeScriptContext, ex);
-					
 					String content = ErrorReport.getErrorMessage(ex);
 					passUncaughtExceptionToJsNative(ex, content);
-					
+
 					if (IsLogEnabled) Log.e(DEFAULT_LOG_TAG, "Uncaught Exception Message=" + ex.getMessage());
 
-					// call the already installed handler (if any)
-					if (h != null)
-					{
-						h.uncaughtException(thread, ex);
-					}
+					//start error activity
+					ErrorReport.startActivity(NativeScriptContext, ex);
+
+					//kill process so the error activity triggers
+					ErrorReport.killProcess(NativeScriptContext);	
 				}
 			};
 		}

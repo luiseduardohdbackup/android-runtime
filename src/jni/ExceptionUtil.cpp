@@ -115,36 +115,25 @@ void ExceptionUtil::GetExceptionMessage(JEnv& env, jthrowable exception, string&
 	}
 }
 
-void ExceptionUtil::HandleInvalidState(const string& message, bool fail){
-	if(fail){
+void ExceptionUtil::HandleInvalidState(const string& message){
 		NativeScriptRuntime::APP_FAIL(message.c_str());
-	}
-	else {
-		auto error = Exception::Error(ConvertToV8String(message));
-		Isolate::GetCurrent()->ThrowException(error);
-	}
 }
 
-bool ExceptionUtil::HandleTryCatch(TryCatch& tc, bool rethrow){
+bool ExceptionUtil::HandleTryCatch(TryCatch& tc){
 	if(!tc.HasCaught()){
 		return false;
 	}
 
-	if(rethrow)
-	{
-		if(tc.CanContinue()){
-			auto message = tc.Message();
-			auto error = tc.Exception();
-			OnUncaughtError(message, error); //calls JS global function("__onUncaughtError") passing the uncaught error
-		}
-		else {
-			auto errorMessage = PrintErrorMessage(tc.Message(), tc.Exception());
+	if(tc.CanContinue()){
+		ThrowExceptionToJava(tc);
+	}
+	else {
+		auto errorMessage = PrintErrorMessage(tc.Message(), tc.Exception());
 
-			stringstream ss;
-			ss << "An uncaught error has occurred and V8's TryCatch block may not be continued. Error is: " << errorMessage;
+		stringstream ss;
+		ss << endl << "An uncaught error has occurred and V8's TryCatch block may not be continued. Error is: " << errorMessage;
 
-			HandleInvalidState(ss.str(), true);
-		}
+		HandleInvalidState(ss.str());
 	}
 
 	return true;
@@ -206,12 +195,12 @@ string ExceptionUtil::GetErrorMessage(const Handle<Message>& message, const Hand
 		str = String::NewFromUtf8(Isolate::GetCurrent(), "");
 	}
 	String::Utf8Value utfError(str);
-	ss << *utfError << endl;
+	ss << endl << endl << *utfError << endl;
 	ss << "File: \"" << ConvertToString(message->GetScriptResourceName().As<String>());
-	ss << ", line: " << message->GetLineNumber() - Constants::MODULE_LINES_OFFSET << ", column: " << message->GetStartColumn() << endl;
+	ss << ", line: " << message->GetLineNumber() - Constants::MODULE_LINES_OFFSET << ", column: " << message->GetStartColumn() << endl << endl;
 
 	string stackTraceMessage = GetErrorStackTrace(message->GetStackTrace());
-	ss << "StackTrace: " << endl << stackTraceMessage;
+	ss << "StackTrace: " << endl << stackTraceMessage << endl;
 
 	return ss.str();
 }
@@ -266,10 +255,10 @@ bool ExceptionUtil::ThrowExceptionToJava(TryCatch& tc)
 
 	DEBUG_WRITE("Error: %s", loggedMessage.c_str());
 
+	JEnv env;
+	env.ExceptionClear();
 	if (tc.CanContinue())
 	{
-		JEnv env;
-
 		jweak javaThrowable = nullptr;
 		if (ex->IsObject())
 		{
@@ -301,6 +290,13 @@ bool ExceptionUtil::ThrowExceptionToJava(TryCatch& tc)
 	{
 		NativeScriptRuntime::APP_FAIL(loggedMessage.c_str());
 	}
+}
+
+void ExceptionUtil::ThrowExceptionToJs(const string& exceptionMessage)
+{
+	Isolate *isolate(Isolate::GetCurrent());
+	Local<Value> exception = v8::Exception::Error(ConvertToV8String(exceptionMessage));
+	isolate->ThrowException(exception);
 }
 
 bool ExceptionUtil::CheckForJavaException(JEnv& env)

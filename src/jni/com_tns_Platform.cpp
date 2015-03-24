@@ -93,7 +93,7 @@ void PrepareExtendFunction(Isolate *isolate, jstring filesPath)
 
 	script->Run();
 
-	ExceptionUtil::GetInstance()->HandleTryCatch(tc, true);
+	ExceptionUtil::GetInstance()->HandleTryCatch(tc);
 
 	DEBUG_WRITE("Executed prepareExtend.js script");
 }
@@ -205,13 +205,13 @@ extern "C" void Java_com_tns_Platform_runNativeScript(JNIEnv *_env, jobject obj,
 
 	DEBUG_WRITE("Compile script");
 
-	if (ExceptionUtil::GetInstance()->HandleTryCatch(tc, true))
+	if (ExceptionUtil::GetInstance()->HandleTryCatch(tc))
 	{
-		ExceptionUtil::GetInstance()->HandleInvalidState("Bootstrap script has error(s).", true);
+//		ExceptionUtil::GetInstance()->HandleInvalidState("Bootstrap script has error(s).");
 	}
 	else if (script.IsEmpty())
 	{
-		ExceptionUtil::GetInstance()->HandleInvalidState("Bootstrap script is empty.", true);
+//		ExceptionUtil::GetInstance()->HandleInvalidState("Bootstrap script is empty.");
 	}
 	else
 	{
@@ -225,7 +225,7 @@ extern "C" void Java_com_tns_Platform_runNativeScript(JNIEnv *_env, jobject obj,
 		}
 
 		auto appModuleObj = script->Run();
-		if (ExceptionUtil::GetInstance()->HandleTryCatch(tc, true))
+		if (ExceptionUtil::GetInstance()->HandleTryCatch(tc))
 		{
 			// TODO: Fail?
 		}
@@ -236,9 +236,8 @@ extern "C" void Java_com_tns_Platform_runNativeScript(JNIEnv *_env, jobject obj,
 			auto thiz = Object::New(isolate);
 			auto res = moduleFunc->Call(thiz, 1, &exportsObj);
 
-			if(ExceptionUtil::GetInstance()->HandleTryCatch(tc, false))
+			if(ExceptionUtil::GetInstance()->HandleTryCatch(tc))
 			{
-				ExceptionUtil::GetInstance()->ThrowExceptionToJava(tc);
 			}
 			else
 			{
@@ -248,7 +247,7 @@ extern "C" void Java_com_tns_Platform_runNativeScript(JNIEnv *_env, jobject obj,
 		}
 		else
 		{
-			ExceptionUtil::GetInstance()->HandleInvalidState("Error running NativeScript bootstrap code.", true);
+			ExceptionUtil::GetInstance()->HandleInvalidState("Error running NativeScript bootstrap code.");
 		}
 	}
 
@@ -321,7 +320,7 @@ extern "C" jobject Java_com_tns_Platform_callJSMethodNative(JNIEnv *_env, jobjec
 		ss << "Attempting to call method " << ArgConverter::jstringToString(methodName) << endl;
 
 		// TODO: Should we kill the Java VM here?
-		ExceptionUtil::GetInstance()->HandleInvalidState(ss.str(), true);
+		ExceptionUtil::GetInstance()->HandleInvalidState(ss.str());
 		return nullptr;
 	}
 
@@ -339,10 +338,9 @@ extern "C" jobject Java_com_tns_Platform_callJSMethodNative(JNIEnv *_env, jobjec
 	TryCatch tc;
 	auto jsResult = NativeScriptRuntime::CallJSMethod(env, jsObject, methodName, packagedArgs, tc);
 
-	if (tc.HasCaught())
+	if (ExceptionUtil::GetInstance()->HandleTryCatch(tc))
 	{
 		DEBUG_WRITE("Calling js method %s failed", method_name.c_str());
-		ExceptionUtil::GetInstance()->ThrowExceptionToJava(tc);
 	}
 
 	jobject javaObject = ConvertJsValueToJavaObject(env, jsResult);
@@ -372,7 +370,7 @@ extern "C" jobjectArray Java_com_tns_Platform_createJSInstanceNative(JNIEnv *_en
 		auto appInstance = objectManager->GetJsObjectByJavaObject(AppJavaObjectID);
 		if (appInstance.IsEmpty())
 		{
-			ExceptionUtil::GetInstance()->HandleInvalidState("NativeScript application not initialized correctly. Missing the global app object initialization.", true);
+			ExceptionUtil::GetInstance()->HandleInvalidState("NativeScript application not initialized correctly. Missing the global app object initialization.");
 			return nullptr;
 		}
 
@@ -381,7 +379,7 @@ extern "C" jobjectArray Java_com_tns_Platform_createJSInstanceNative(JNIEnv *_en
 
 		if (createActivityFunction.IsEmpty() || !createActivityFunction->IsFunction())
 		{
-			ExceptionUtil::GetInstance()->HandleInvalidState("NativeScript application not initialized correctly. No function 'createActivity' found on the application object.", true);
+			ExceptionUtil::GetInstance()->HandleInvalidState("NativeScript application not initialized correctly. No function 'createActivity' found on the application object.");
 			return nullptr;
 		}
 
@@ -391,7 +389,7 @@ extern "C" jobjectArray Java_com_tns_Platform_createJSInstanceNative(JNIEnv *_en
 		jsInstance = jsResult.As<Object>();
 		if (jsInstance.IsEmpty() || jsInstance->IsNull() || jsInstance->IsUndefined())
 		{
-			ExceptionUtil::GetInstance()->HandleInvalidState("NativeScript application not initialized correctly. getActivity method returned invalid value.", true);
+			ExceptionUtil::GetInstance()->HandleInvalidState("NativeScript application not initialized correctly. getActivity method returned invalid value.");
 			return nullptr;
 		}
 
@@ -412,7 +410,7 @@ extern "C" jobjectArray Java_com_tns_Platform_createJSInstanceNative(JNIEnv *_en
 		jsInstance = MetadataNode::CreateExtendedJSWrapper(isolate, proxyClassName);
 		if (jsInstance.IsEmpty())
 		{
-			ExceptionUtil::GetInstance()->HandleInvalidState("NativeScript application not initialized correctly. Cannot create extended JS wrapper.", true);
+			ExceptionUtil::GetInstance()->HandleInvalidState("NativeScript application not initialized correctly. Cannot create extended JS wrapper.");
 			return nullptr;
 		}
 	}
